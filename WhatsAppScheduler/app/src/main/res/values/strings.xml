@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">WA Scheduler</string>
+    <string name="a11y_desc">Opens WhatsApp at the scheduled time and sends your message or poll to the chosen group.</string>
+</resources>
