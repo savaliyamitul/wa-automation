@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import android.widget.Toast
 
 /**
  * Drives WhatsApp's UI. All view IDs / labels live in the helpers below so they are easy to adjust
@@ -58,24 +59,45 @@ class WaService : AccessibilityService() {
     // ---------- flows ----------
 
     private suspend fun openChat(name: String): Boolean {
-        val search = waitFor(15000) { byId("menuitem_search") ?: byDesc("Search") } ?: return false
+        val search = waitFor(15000) {
+            byId("menuitem_search") ?: byDesc("Search")
+                ?: findNodes { n ->
+                    val t = (n.text ?: n.contentDescription ?: n.hintText)?.toString() ?: ""
+                    t.contains("Search", true)
+                }.firstOrNull()
+        }
+        if (search == null) { debug("search not found"); return false }
         click(search)
-        val input = waitFor { byId("search_input") ?: editables().firstOrNull() } ?: return false
+        delay(800)
+        val input = waitFor { byId("search_input") ?: editables().firstOrNull() }
+        if (input == null) { debug("search box not found"); return false }
         setText(input, name)
-        delay(1000)
-        val hit = waitFor { findNodes { it.text?.toString() == name && !it.isEditable }.firstOrNull() } ?: return false
+        delay(1500)
+        val hit = waitFor { findNodes { it.text?.toString() == name && !it.isEditable }.firstOrNull() }
+        if (hit == null) { debug("group not found in results"); return false }
         click(hit)
-        return waitFor { byId("entry") } != null
+        val opened = waitFor { byId("entry") ?: editables().firstOrNull() }
+        if (opened == null) { debug("chat did not open"); return false }
+        return true
     }
 
     private suspend fun sendText(t: String): Boolean {
-        val entry = waitFor { byId("entry") } ?: return false
+        val entry = waitFor { byId("entry") ?: editables().firstOrNull() }
+        if (entry == null) { debug("message box not found"); return false }
         setText(entry, t)
         delay(500)
-        val send = waitFor { byId("send") ?: byDesc("Send") } ?: return false
+        val send = waitFor { byId("send") ?: byDesc("Send") }
+        if (send == null) { debug("send button not found"); return false }
         click(send)
         delay(1500)
         return true
+    }
+
+    private fun debug(why: String) {
+        val seen = findNodes { it.viewIdResourceName != null || it.text != null }
+            .take(25)
+            .joinToString(" | ") { (it.viewIdResourceName?.substringAfter("id/") ?: "") + ":" + (it.text ?: it.contentDescription ?: "") }
+        Toast.makeText(this, "$why\n$seen", Toast.LENGTH_LONG).show()
     }
 
     private suspend fun sendPoll(m: Msg): Boolean {
